@@ -522,4 +522,7 @@ ompi_coll_han_reorder_gather(const void *sbuf,
 
 size_t
 coll_han_utils_gcd(const size_t *numerators, const size_t size);
+
+int32_t
+ompi_datatype_enlarge_bytes(const size_t count, ompi_datatype_t** newType);
 #endif                          /* MCA_COLL_HAN_EXPORT_H */

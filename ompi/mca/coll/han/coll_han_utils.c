@@ -54,3 +54,18 @@ size_t coll_han_utils_gcd(const size_t *numerators, const size_t size)
 
     return denominator;
 }
+
+/* Create a new type with size of count bytes */
+int32_t ompi_datatype_enlarge_bytes(const size_t count, ompi_datatype_t** newType)
+{
+    ompi_datatype_t *pdt;
+    if ( OMPI_SUCCESS != ompi_datatype_duplicate (MPI_BYTE, &pdt)){
+        ompi_datatype_destroy (&pdt);
+        return MPI_ERR_INTERN;
+    }
+
+    ompi_datatype_add( pdt, MPI_BYTE, count, 0, (MPI_BYTE->super.ub - MPI_BYTE->super.lb) );
+
+    *newType = pdt;
+    return OMPI_SUCCESS;
+}

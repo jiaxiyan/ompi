@@ -351,7 +351,7 @@ int mca_coll_han_gatherv_intra(const void *sbuf, int scount, struct ompi_datatyp
     }
 
     if (1 < datatype_size) {
-        ompi_datatype_create_contiguous(datatype_size, MPI_BYTE, &temptype);
+        ompi_datatype_enlarge_bytes(datatype_size, &temptype);
         ompi_datatype_commit(&temptype);
     }
 
