@@ -357,6 +357,32 @@ mca_pml_cm_send(const void *buf,
 }
 
 __opal_attribute_always_inline__ static inline int
+mca_pml_cm_fastsend(const void* buf,
+                    size_t count,
+                    ompi_datatype_t* datatype,
+                    int dst,
+                    int tag,
+                    mca_pml_base_send_mode_t sendmode,
+                    ompi_communicator_t* comm,
+                    ompi_request_t** request)
+{
+    // ret = OMPI_MTL_CALL(fastsend(ompi_mtl,
+    //                              comm,
+    //                              dst,
+    //                              tag,
+    //                              &convertor,
+    //                              sendmode));
+    size_t sdsize;
+    ompi_datatype_type_size(datatype, &sdsize);
+
+    if (count * sdsize < 4096) {
+        ret = mca_pml_cm_send(buf, count, datatype, dst, tag, sendmode, comm);
+    } else {
+        ret = mca_pml_cm_isend(buf, count, datatype, dst, tag, sendmode, comm, request);
+    }
+}
+
+__opal_attribute_always_inline__ static inline int
 mca_pml_cm_iprobe(int src, int tag,
                    struct ompi_communicator_t *comm,
                    int *matched, ompi_status_public_t * status)

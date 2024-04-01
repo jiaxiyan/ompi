@@ -45,6 +45,7 @@ ompi_pml_cm_t ompi_pml_cm = {
         .pml_isend_init    = mca_pml_cm_isend_init,
         .pml_isend         = mca_pml_cm_isend,
         .pml_send          = mca_pml_cm_send,
+        .pml_fastsend      = mca_pml_cm_fastsend,
         .pml_iprobe        = mca_pml_cm_iprobe,
         .pml_probe         = mca_pml_cm_probe,
         .pml_start         = mca_pml_cm_start,

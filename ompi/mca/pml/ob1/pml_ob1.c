@@ -83,6 +83,7 @@ mca_pml_ob1_t mca_pml_ob1 = {
         .pml_isend_init     = mca_pml_ob1_isend_init,
         .pml_isend          = mca_pml_ob1_isend,
         .pml_send           = mca_pml_ob1_send,
+        .pml_fastsend       = mca_pml_ob1_isend,
         .pml_iprobe         = mca_pml_ob1_iprobe,
         .pml_probe          = mca_pml_ob1_probe,
         .pml_start          = mca_pml_ob1_start,

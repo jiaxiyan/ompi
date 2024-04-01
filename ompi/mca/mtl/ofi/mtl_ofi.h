@@ -1944,6 +1944,27 @@ ompi_mtl_ofi_isend(struct mca_mtl_base_module_t *mtl,
                                     ompi_mtl_ofi.fi_cq_data);
 }
 
+// __opal_attribute_always_inline__ static inline int
+// ompi_mtl_ofi_fastsend(struct mca_mtl_base_module_t *mtl,
+//                       struct ompi_communicator_t *comm,
+//                       int dest,
+//                       int tag,
+//                       struct opal_convertor_t *convertor,
+//                       mca_pml_base_send_mode_t mode,
+//                       bool blocking,
+//                       mca_mtl_request_t *mtl_request)
+// {
+//     if ( < 4096) {
+//         return ompi_mtl_ofi_send_generic(mtl, comm, dest, tag,
+//                                          convertor, mode,
+//                                          ompi_mtl_ofi.fi_cq_data);
+//     } else {
+//         return ompi_mtl_ofi_isend_generic(mtl, comm, dest, tag,
+//                                           convertor, mode, blocking, mtl_request,
+//                                           ompi_mtl_ofi.fi_cq_data);
+//     }
+// }
+
 __opal_attribute_always_inline__ static inline int
 ompi_mtl_ofi_irecv(struct mca_mtl_base_module_t *mtl,
                struct ompi_communicator_t *comm,

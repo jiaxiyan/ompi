@@ -85,6 +85,7 @@ mca_pml_base_module_t mca_pml = {
     NULL,                    /* pml_isend_init */
     NULL,                    /* pml_isend */
     NULL,                    /* pml_send */
+    NULL,                    /* pml_fastsend */
     NULL,                    /* pml_iprobe */
     NULL,                    /* pml_probe */
     NULL,                    /* pml_start */

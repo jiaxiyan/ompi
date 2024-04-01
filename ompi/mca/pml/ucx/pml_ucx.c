@@ -75,6 +75,7 @@ mca_pml_ucx_module_t ompi_pml_ucx = {
         .pml_isend_init     = mca_pml_ucx_isend_init,
         .pml_isend          = mca_pml_ucx_isend,
         .pml_send           = mca_pml_ucx_send,
+        .pml_fastsend       = mca_pml_ucx_isend,
         .pml_iprobe         = mca_pml_ucx_iprobe,
         .pml_probe          = mca_pml_ucx_probe,
         .pml_start          = mca_pml_ucx_start,

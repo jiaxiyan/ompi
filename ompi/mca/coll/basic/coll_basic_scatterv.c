@@ -50,6 +50,7 @@ mca_coll_basic_scatterv_intra(const void *sbuf, const int *scounts,
     char *ptmp;
     ptrdiff_t lb, extent;
     size_t sdsize;
+    ompi_request_t **reqs;
 
     /* Initialize */
 
@@ -83,6 +84,9 @@ mca_coll_basic_scatterv_intra(const void *sbuf, const int *scounts,
         return OMPI_ERROR;
     }
 
+    reqs = ompi_coll_base_comm_get_reqs(module->base_data, size);
+    if( NULL == reqs ) { return OMPI_ERR_OUT_OF_RESOURCE; }
+
     for (i = 0; i < size; ++i) {
         ptmp = ((char *) sbuf) + (extent * disps[i]);
 
@@ -100,9 +104,9 @@ mca_coll_basic_scatterv_intra(const void *sbuf, const int *scounts,
         } else {
             /* Only send if there is something to send */
             if (scounts[i] > 0) {
-                err = MCA_PML_CALL(send(ptmp, scounts[i], sdtype, i,
-                                        MCA_COLL_BASE_TAG_SCATTERV,
-                                        MCA_PML_BASE_SEND_STANDARD, comm));
+                err = MCA_PML_CALL(fastsend(ptmp, scounts[i], sdtype, i,
+                                   MCA_COLL_BASE_TAG_SCATTERV,
+                                   MCA_PML_BASE_SEND_STANDARD, comm, &(reqs[i])));
                 if (MPI_SUCCESS != err) {
                     return err;
                 }

@@ -395,6 +395,32 @@ typedef int (*mca_pml_base_module_send_fn_t)(
     struct ompi_communicator_t* comm
 );
 
+
+/**
+ *  Post a send request.
+ *
+ *  @param buf (IN)         User buffer.
+ *  @param count (IN)       Number of elements of the specified datatype.
+ *  @param datatype (IN)    User defined datatype.
+ *  @param dst (IN)         Peer rank w/in communicator.
+ *  @param tag (IN)         User defined tag.
+ *  @param mode (IN)        Send mode (STANDARD,BUFFERED,SYNCHRONOUS,READY)
+ *  @param comm (IN)        Communicator.
+ *  @param request (OUT)    Request handle.
+ *  @return                 OMPI_SUCCESS or failure status.
+ */
+typedef int (*mca_pml_base_module_fastsend_fn_t)(
+    const void *buf,
+    size_t count,
+    struct ompi_datatype_t *datatype,
+    int dst,
+    int tag,
+    mca_pml_base_send_mode_t mode,
+    struct ompi_communicator_t* comm,
+    struct ompi_request_t **request
+);
+
+
 /**
  * Initiate one or more persistent requests.
  *
@@ -551,6 +577,7 @@ struct mca_pml_base_module_2_1_0_t {
     mca_pml_base_module_isend_init_fn_t   pml_isend_init;
     mca_pml_base_module_isend_fn_t        pml_isend;
     mca_pml_base_module_send_fn_t         pml_send;
+    mca_pml_base_module_fastsend_fn_t     pml_fastsend;
     mca_pml_base_module_iprobe_fn_t       pml_iprobe;
     mca_pml_base_module_probe_fn_t        pml_probe;
     mca_pml_base_module_start_fn_t        pml_start;
