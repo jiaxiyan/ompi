@@ -343,6 +343,53 @@ int ompi_coll_base_retain_datatypes_w( ompi_request_t *req,
     return OMPI_SUCCESS;
 }
 
+
+int ompi_coll_base_brucks_pack_unpack(int pack, void *rbuf, void *pupbuf, MPI_Datatype rtype, int count,
+                                             int pow_k_phase, int k, int digitval, int comm_size, int *pupsize) {
+    int err = MPI_SUCCESS;
+    int line = 0, offset, nconsecutive_occurrences, distance;
+    ptrdiff_t type_extent;
+
+    err = ompi_datatype_type_extent (rtype, &type_extent);
+    if (err != MPI_SUCCESS) { line = __LINE__; goto err_hndl; }
+
+    /* first offset where the phase'th bit has value digitval */
+    offset = pow_k_phase * digitval;
+    /* number of consecutive occurrences of digitval */
+    nconsecutive_occurrences = pow_k_phase;
+    /* distance between non-consecutive occurrences of digitval */
+    distance = (k - 1) * pow_k_phase;
+
+    *pupsize = 0;       /* points to the first empty location in pupbuf */
+    while (offset < comm_size) {
+        if (pack) {
+            err = ompi_datatype_copy_content_same_ddt(rtype, count, 
+                                                      (char *) pupbuf + *pupsize, (char *) rbuf + offset * count * type_extent);
+            if (err < 0) { line = __LINE__; err = -1; goto err_hndl;  }
+        } else {
+            err = ompi_datatype_copy_content_same_ddt(rtype, count, 
+                                                      (char *) rbuf + offset * count * type_extent, (char *) pupbuf + *pupsize);
+            
+            if (err < 0) { line = __LINE__; err = -1; goto err_hndl;  }
+        }
+
+        offset += 1;
+        nconsecutive_occurrences -= 1;
+
+        if (nconsecutive_occurrences == 0) {    /* consecutive occurrences are over */
+            offset += distance;
+            nconsecutive_occurrences = pow_k_phase;
+        }
+
+        *pupsize += count * type_extent;
+    }
+
+err_hndl:
+    (void)line;
+    return err;
+}
+
+
 static void nbc_req_constructor(ompi_coll_base_nbc_request_t *req)
 {
     req->cb.req_complete_cb = NULL;

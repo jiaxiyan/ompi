@@ -187,6 +187,9 @@ int ompi_coll_base_retain_datatypes_w( ompi_request_t *request,
                                        ompi_datatype_t * const rtypes[],
                                        bool use_topo);
 
+int ompi_coll_base_brucks_pack_unpack(int pack, void *rbuf, void *pupbuf, MPI_Datatype rtype, int count,
+                                             int pow_k_phase, int k, int digitval, int comm_size, int *pupsize);
+
 /* File reading function */
 int ompi_coll_base_file_getnext_long(FILE *fptr, int *fileline, long* val);
 int ompi_coll_base_file_getnext_size_t(FILE *fptr, int *fileline, size_t* val);
