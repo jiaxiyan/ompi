@@ -404,10 +404,11 @@ int ompi_coll_tuned_alltoall_intra_dec_fixed(const void *sbuf, size_t scount,
         }
     }
 
+    int faninout = 2;
     return ompi_coll_tuned_alltoall_intra_do_this (sbuf, scount, sdtype,
                                                    rbuf, rcount, rdtype,
                                                    comm, module,
-                                                   alg, 0, 0, ompi_coll_tuned_alltoall_max_requests);
+                                                   alg, faninout, 0, ompi_coll_tuned_alltoall_max_requests);
 }
 
 /*

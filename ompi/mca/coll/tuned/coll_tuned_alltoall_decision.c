@@ -173,7 +173,7 @@ int ompi_coll_tuned_alltoall_intra_do_this(const void *sbuf, size_t scount,
     case (2):
         return ompi_coll_base_alltoall_intra_pairwise(sbuf, scount, sdtype, rbuf, rcount, rdtype, comm, module);
     case (3):
-        return ompi_coll_base_alltoall_intra_bruck(sbuf, scount, sdtype, rbuf, rcount, rdtype, comm, module);
+        return ompi_coll_base_alltoall_intra_k_bruck(sbuf, scount, sdtype, rbuf, rcount, rdtype, comm, module, faninout);
     case (4):
         return ompi_coll_base_alltoall_intra_linear_sync(sbuf, scount, sdtype, rbuf, rcount, rdtype, comm, module, max_requests);
     case (5):
