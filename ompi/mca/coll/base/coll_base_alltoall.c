@@ -235,6 +235,7 @@ int ompi_coll_base_alltoall_intra_pairwise(const void *sbuf, size_t scount,
     return err;
 }
 
+
 /*
  * 
  * Function: ompi_coll_base_alltoall_intra_k_bruck using O(logk(N)) steps
@@ -318,11 +319,15 @@ int ompi_coll_base_alltoall_intra_k_bruck(const void *sbuf, size_t scount,
                                           mca_coll_base_module_t *module,
                                           int radix)
 {
-    int i, j, line = -1, rank, size, err = 0;
+    int i, line = -1, rank, size, err = 0;
     int sendto, recvfrom, distance, *displs = NULL;
     char *tmpbuf = NULL, *tmpbuf_free = NULL;
+    void **tmp_sbuf = NULL, **tmp_rbuf = NULL;
     ptrdiff_t sext, rext, span, gap = 0;
-    struct ompi_datatype_t *new_ddt;
+    ompi_request_t **reqs;
+    int num_reqs = 0, max_reqs = 0;
+    int offset, nconsecutive_occurrences, delta;
+    int largest_power_of_k = 1;
 
     if (MPI_IN_PLACE == sbuf) {
         return mca_coll_base_alltoall_intra_basic_inplace (rbuf, rcount, rdtype,
@@ -375,8 +380,25 @@ int ompi_coll_base_alltoall_intra_k_bruck(const void *sbuf, size_t scount,
         }
     }
 
-    /* perform communication step */
     for (distance = 1; distance < size; distance *= radix) {
+        if (distance <= size) {
+            largest_power_of_k = distance;
+        }
+    }
+
+    /* perform communication step */
+    tmp_sbuf = (void **)malloc(sizeof(void *) * (radix - 1));
+    tmp_rbuf = (void **)malloc(sizeof(void *) * (radix - 1));
+    for (i = 0; i < radix - 1; i++) {
+        tmp_sbuf[i] = (void *) malloc(rext * rcount * largest_power_of_k);
+        tmp_rbuf[i] = (void *) malloc(rext * rcount * largest_power_of_k);
+    }
+    int packsize = 0;
+
+    max_reqs = 2 * (radix - 1);
+    reqs = ompi_coll_base_comm_get_reqs(module->base_data, max_reqs);
+    for (distance = 1; distance < size; distance *= radix) {
+        num_reqs = 0;
         for (i = 1; i < radix; i++) {
 
             if (distance * i >= size) {
@@ -386,41 +408,78 @@ int ompi_coll_base_alltoall_intra_k_bruck(const void *sbuf, size_t scount,
             sendto = (rank + distance * i) % size;
             recvfrom = (rank - distance * i + size) % size;
 
-            new_ddt = ompi_datatype_create((1 + size/distance) * (2 + rdtype->super.desc.used));
+            /* Pack non-contiguous data from tmpbuf to tmp_sbuf */
+            /* first offset where the phase'th bit has value i */
+            offset = distance * i;
+            /* number of consecutive occurrences of i */
+            nconsecutive_occurrences = distance;
+            /* distance between non-consecutive occurrences of i */
+            delta = (radix - 1) * distance;
 
-            /* Create datatype describing data sent/received */
-            for (j = i * distance; j < size; j += radix * distance) {
-                int nblocks = distance;
-                if (j + distance >= size) {
-                    nblocks = size - j;
+            packsize = 0;
+            while (offset < size) {
+                err = ompi_datatype_copy_content_same_ddt(rdtype, rcount, 
+                                                          (char *) tmp_sbuf[i - 1] + packsize, 
+                                                          (char *) tmpbuf + offset * rcount * rext);
+                if (err < 0) { line = __LINE__; err = -1; goto err_hndl;  }
+                offset += 1;
+                nconsecutive_occurrences -= 1;
+
+                if (nconsecutive_occurrences == 0) {
+                    offset += delta;
+                    nconsecutive_occurrences = distance;
                 }
-                ompi_datatype_add(new_ddt, rdtype, rcount * nblocks,
-                                  j * rcount * rext, rext);
+
+                packsize += rcount * rext;
             }
 
-            /* Commit the new datatype */
-            err = ompi_datatype_commit(&new_ddt);
-            if (err != MPI_SUCCESS) { line = __LINE__; goto err_hndl;  }
+            /* Send from tmp_sbuf to tmp_rbuf */
+            err = MCA_PML_CALL(irecv(tmp_rbuf[i - 1], packsize, MPI_BYTE, recvfrom,
+                                     MCA_COLL_BASE_TAG_ALLTOALL,
+                                     comm,
+                                     &reqs[num_reqs++]));
+            if (MPI_SUCCESS != err) { line = __LINE__; goto err_hndl; }
+            err = MCA_PML_CALL(isend(tmp_sbuf[i - 1], packsize, MPI_BYTE, sendto,
+                                     MCA_COLL_BASE_TAG_ALLTOALL,
+                                     MCA_PML_BASE_SEND_STANDARD,
+                                     comm,
+                                     &reqs[num_reqs++]));
+            if (MPI_SUCCESS != err) { line = __LINE__; goto err_hndl; } 
+        }
+        err = ompi_request_wait_all(num_reqs, reqs, MPI_STATUSES_IGNORE);
+        if (MPI_SUCCESS != err) { line = __LINE__; goto err_hndl; }
 
-            /* Sendreceive */
-            err = ompi_coll_base_sendrecv ( tmpbuf, 1, new_ddt, sendto,
-                                            MCA_COLL_BASE_TAG_ALLTOALL,
-                                            rbuf, 1, new_ddt, recvfrom,
-                                            MCA_COLL_BASE_TAG_ALLTOALL,
-                                            comm, MPI_STATUS_IGNORE, rank );
-            if (err != MPI_SUCCESS) { line = __LINE__; goto err_hndl; }
+        for (i = 1; i < radix; i++) {
+            if (distance * i >= size) {
+                break;
+            }
+            /* Unpack contiguous data from tmp_rbuf to tmpbuf */
+            offset = distance * i;
+            /* number of consecutive occurrences of i */
+            nconsecutive_occurrences = distance;
+            /* distance between non-consecutive occurrences of i */
+            delta = (radix - 1) * distance;
 
-            /* Copy back new data from recvbuf to tmpbuf */
-            err = ompi_datatype_copy_content_same_ddt(new_ddt, 1, tmpbuf, (char *) rbuf);
-            if (err < 0) { line = __LINE__; err = -1; goto err_hndl;  }
+            packsize = 0;
+            while (offset < size) {
+                err = ompi_datatype_copy_content_same_ddt(rdtype, rcount, 
+                                                          (char *) tmpbuf + offset * rcount * rext,
+                                                          (char *) tmp_rbuf[i - 1] + packsize);
+                if (err < 0) { line = __LINE__; err = -1; goto err_hndl;  }
+                offset += 1;
+                nconsecutive_occurrences -= 1;
 
-            /* free ddt */
-            err = ompi_datatype_destroy(&new_ddt);
-            if (err != MPI_SUCCESS) { line = __LINE__; goto err_hndl;  }
+                if (nconsecutive_occurrences == 0) {
+                    offset += delta;
+                    nconsecutive_occurrences = distance;
+                }
+
+                packsize += rcount * rext;
+            }
         }
     } /* end of for (distance = 1... */
 
-    /* Step 3 - local rotation - */
+    /* Step 3 - local rotation from tmpbuf to rbuf - */
     for (i = 0; i < size; i++) {
 
         err = ompi_datatype_copy_content_same_ddt (rdtype, (int32_t) rcount,
@@ -430,6 +489,10 @@ int ompi_coll_base_alltoall_intra_k_bruck(const void *sbuf, size_t scount,
     }
 
     /* Step 4 - clean up */
+    for (i = 0; i < radix - 1; i++) {
+        free(tmp_sbuf[i]);
+        free(tmp_rbuf[i]);
+    }
     if (tmpbuf_free != NULL) free(tmpbuf_free);
     return OMPI_SUCCESS;
 
