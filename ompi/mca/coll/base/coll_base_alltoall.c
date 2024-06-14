@@ -321,9 +321,8 @@ int ompi_coll_base_alltoall_intra_k_bruck(const void *sbuf, size_t scount,
 {
     int i, line = -1, rank, size, err = 0;
     int sendto, recvfrom, distance, *displs = NULL;
-    char *tmpbuf = NULL, *tmpbuf_free = NULL;
     void **tmp_sbuf = NULL, **tmp_rbuf = NULL;
-    ptrdiff_t sext, rext, span, gap = 0;
+    ptrdiff_t sext, rext = 0;
     ompi_request_t **reqs;
     int num_reqs = 0, max_reqs = 0;
     int offset, nconsecutive_occurrences, delta;
@@ -349,36 +348,6 @@ int ompi_coll_base_alltoall_intra_k_bruck(const void *sbuf, size_t scount,
 
     err = ompi_datatype_type_extent (rdtype, &rext);
     if (err != MPI_SUCCESS) { line = __LINE__; goto err_hndl; }
-
-    span = opal_datatype_span(&rdtype->super, (int64_t)size * rcount, &gap);
-
-    /* tmp buffer allocation for message data */
-    tmpbuf_free = (char *)malloc(span);
-    if (tmpbuf_free == NULL) { line = __LINE__; err = -1; goto err_hndl; }
-    tmpbuf = tmpbuf_free - gap;
-
-    /* Step 1 - local rotation - shift up by rank */
-    err = ompi_datatype_sndrcv ((char*)sbuf + ((ptrdiff_t) rank * scount * sext),
-                                (int32_t) (size - rank) * scount,
-                                sdtype,
-                                tmpbuf,
-                                (int32_t) (size - rank) * rcount,
-                                rdtype);
-    if (err<0) {
-        line = __LINE__; err = -1; goto err_hndl;
-    }
-
-    if (rank != 0) {
-        err = ompi_datatype_sndrcv ((char*)sbuf,
-                                    (int32_t) rank * scount,
-                                    sdtype,
-                                    tmpbuf + ((ptrdiff_t) (size - rank) * rcount * rext),
-                                    (int32_t) rank * rcount,
-                                    rdtype);
-        if (err<0) {
-            line = __LINE__; err = -1; goto err_hndl;
-        }
-    }
 
     for (distance = 1; distance < size; distance *= radix) {
         if (distance <= size) {
@@ -408,7 +377,7 @@ int ompi_coll_base_alltoall_intra_k_bruck(const void *sbuf, size_t scount,
             sendto = (rank + distance * i) % size;
             recvfrom = (rank - distance * i + size) % size;
 
-            /* Pack non-contiguous data from tmpbuf to tmp_sbuf */
+            /* Pack non-contiguous data from sbuf to tmp_sbuf */
             /* first offset where the phase'th bit has value i */
             offset = distance * i;
             /* number of consecutive occurrences of i */
@@ -418,9 +387,12 @@ int ompi_coll_base_alltoall_intra_k_bruck(const void *sbuf, size_t scount,
 
             packsize = 0;
             while (offset < size) {
-                err = ompi_datatype_copy_content_same_ddt(rdtype, rcount, 
-                                                          (char *) tmp_sbuf[i - 1] + packsize, 
-                                                          (char *) tmpbuf + offset * rcount * rext);
+                err = ompi_datatype_sndrcv ((char*)sbuf + ((ptrdiff_t)((offset + rank) % size) * (ptrdiff_t)scount * sext),
+                                            (int32_t) scount,
+                                            sdtype,
+                                            (char *) tmp_sbuf[i - 1] + packsize,
+                                            (int32_t) rcount,
+                                            rdtype);
                 if (err < 0) { line = __LINE__; err = -1; goto err_hndl;  }
                 offset += 1;
                 nconsecutive_occurrences -= 1;
@@ -453,7 +425,6 @@ int ompi_coll_base_alltoall_intra_k_bruck(const void *sbuf, size_t scount,
             if (distance * i >= size) {
                 break;
             }
-            /* Unpack contiguous data from tmp_rbuf to tmpbuf */
             offset = distance * i;
             /* number of consecutive occurrences of i */
             nconsecutive_occurrences = distance;
@@ -461,9 +432,10 @@ int ompi_coll_base_alltoall_intra_k_bruck(const void *sbuf, size_t scount,
             delta = (radix - 1) * distance;
 
             packsize = 0;
+            /* Unpack contiguous data from tmp_rbuf to rbuf */
             while (offset < size) {
                 err = ompi_datatype_copy_content_same_ddt(rdtype, rcount, 
-                                                          (char *) tmpbuf + offset * rcount * rext,
+                                                          (char *) rbuf + (ptrdiff_t)((rank - offset + size) % size) * (ptrdiff_t)rcount * rext,
                                                           (char *) tmp_rbuf[i - 1] + packsize);
                 if (err < 0) { line = __LINE__; err = -1; goto err_hndl;  }
                 offset += 1;
@@ -479,21 +451,12 @@ int ompi_coll_base_alltoall_intra_k_bruck(const void *sbuf, size_t scount,
         }
     } /* end of for (distance = 1... */
 
-    /* Step 3 - local rotation from tmpbuf to rbuf - */
-    for (i = 0; i < size; i++) {
 
-        err = ompi_datatype_copy_content_same_ddt (rdtype, (int32_t) rcount,
-                                                   ((char*)rbuf) + ((ptrdiff_t)((rank - i + size) % size) * (ptrdiff_t)rcount * rext),
-                                                   tmpbuf + (ptrdiff_t)i * (ptrdiff_t)rcount * rext);
-        if (err < 0) { line = __LINE__; err = -1; goto err_hndl;  }
-    }
-
-    /* Step 4 - clean up */
+    /* clean up */
     for (i = 0; i < radix - 1; i++) {
         free(tmp_sbuf[i]);
         free(tmp_rbuf[i]);
     }
-    if (tmpbuf_free != NULL) free(tmpbuf_free);
     return OMPI_SUCCESS;
 
  err_hndl:
@@ -501,7 +464,18 @@ int ompi_coll_base_alltoall_intra_k_bruck(const void *sbuf, size_t scount,
                  "%s:%4d\tError occurred %d, rank %2d", __FILE__, line, err,
                  rank));
     (void)line;  // silence compiler warning
-    if (tmpbuf_free != NULL) free(tmpbuf_free);
+    if (tmp_sbuf != NULL) {
+        for (i = 0; i < radix - 1; i++) {
+            if (tmp_sbuf[i] != NULL) free(tmp_sbuf[i]);
+        }
+        free(tmp_sbuf);
+    }
+    if (tmp_rbuf != NULL) {
+        for (i = 0; i < radix - 1; i++) {
+            if (tmp_rbuf[i] != NULL) free(tmp_rbuf[i]);
+        }
+        free(tmp_rbuf);
+    }
     if (displs != NULL) free(displs);
     return err;
 }
